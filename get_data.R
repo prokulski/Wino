@@ -133,6 +133,10 @@ getWine <- function(wine_url) {
 # pobierz liste win
 l <- getIndex(n_pages = 27)
 
+# na serwisie w liste win wpada kilka butelek whisky - pewnie jakis blad
+# usuwamy je
+l <- l[!grepl("whisky", l)]
+
 # zapisujemy dane lokalnie na pozniej
 saveRDS(l, file = "lista_stron_win.RDS")
 
