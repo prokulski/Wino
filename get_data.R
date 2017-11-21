@@ -9,6 +9,10 @@ getIndex <- function(n_pages)
    urle_all <- vector()
 
    for(strona in 1:n_pages) {
+      # progress bar :)
+      cat(paste0("\rstrona = ", strona, " / ", n_pages))
+
+
       page_url <- sprintf("https://winezja.pl/wina?str=strona-%d-rozmiar-30-sortowanie-nazwa-kierunek-rosnaco", strona)
 
       # index
@@ -129,13 +133,16 @@ getWine <- function(wine_url) {
 # pobierz liste win
 l <- getIndex(n_pages = 27)
 
+# zapisujemy dane lokalnie na pozniej
+saveRDS(l, file = "lista_stron_win.RDS")
+
 
 # dla kazdej strony pobierz info o winie
 lista_win <- data_frame()
 
 for(w in 1:length(l)) {
    # progress bar :)
-   cat(paste0("\rw = ", w))
+   cat(paste0("\rw = ", w, " / ", length(l)))
 
    # pobierz info i dodaj do pelnej listy
    lista_win <- bind_rows(lista_win, getWine(l[w]))
