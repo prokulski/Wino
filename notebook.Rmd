@@ -1,0 +1,709 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r document_setup, echo=FALSE, message=FALSE, error=FALSE, warning=FALSE}
+library(tidyverse)
+
+# chunks options
+knitr::opts_chunk$set(message = FALSE, error = FALSE, warning = FALSE)
+
+# some better colours theme :)
+theme_set(theme_minimal() +
+             theme(plot.title = element_text(family = NULL, face = "bold", size = 16, color = "black"),
+                   plot.subtitle = element_text(family = NULL, face = "plain", size = 9, color = "gray10"),
+                   plot.caption = element_text(family = NULL, face = "italic", size = 9, color = "darkgray"),
+                   plot.background = element_rect(fill="#efefef", color="#aaaaaa"),
+                   panel.background = element_rect(fill = "white", color="black"),
+                   strip.text.x = element_text(face = "bold")))
+```
+
+```{r}
+library(tidyverse)
+library(forcats) # zbędne dla tidyverse >= 1.2.1
+library(stringr) # zbędne dla tidyverse >= 1.2.1
+```
+
+```{r}
+lista_win <- readRDS("lista_win.RDS")
+
+# trochę poprawek
+lista_win$popularnosc <- as.numeric(lista_win$popularnosc)
+lista_win$expert_rating_ocena <- factor(lista_win$expert_rating_ocena, levels = c("wina poprawne", "wina dobre", "wina bardzo dobre", "wina wyjątkowe", "idealne"))
+lista_win$smak <- factor(lista_win$smak, levels = c("Półsłodkie", "Słodkie", "Półwytrawne", "Wytrawne"))
+lista_win$kolor <- factor(lista_win$kolor, levels = c("Białe", "Czerwone", "Różowe", "Inne"))
+lista_win$region <- ifelse(lista_win$region == "WOJEWÓDZTWO ZACHODNIOPOMORSKIE", "Zachodniopomorskie", lista_win$region)
+lista_win$region <- ifelse(lista_win$region == "WOJEWÓDZTWO LUBUSKIE", "Lubuskie", lista_win$region)
+```
+
+# jaki kraj?
+
+```{r}
+lista_win %>%
+   count(kraj) %>%
+   arrange(n) %>%
+   mutate(kraj = factor(kraj, levels = kraj)) %>%
+   ggplot() +
+   geom_col(aes(kraj, n), color = "gray50", fill = "#a6d96a") +
+   coord_flip() +
+   labs(title = "Liczba oferowanych win w zależności\nod kraju pochodzenia",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "Liczba oferowanych win", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+```
+
+# jaki smak?
+
+```{r, fig.height=4}
+lista_win %>% 
+   count(smak) %>%
+   filter(!is.na(smak)) %>%
+   arrange(n) %>%
+   mutate(smak = factor(smak, levels = smak)) %>%
+   ggplot() +
+   geom_col(aes(smak, n), color = "gray50", fill = "#a6d96a") +
+   coord_flip() +
+   labs(title = "Liczba oferowanych win w zależności od smaku",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "Liczba oferowanych win", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+
+```
+
+# jaki kolor?
+
+```{r, fig.height=4}
+lista_win %>% 
+   count(kolor) %>% 
+   filter(!is.na(kolor)) %>% 
+   arrange(n) %>% 
+   mutate(kolor = factor(kolor, levels = kolor)) %>%
+   ggplot() + 
+   geom_col(aes(kolor, n), color = "gray50", fill = "#a6d96a") +
+   coord_flip() +
+   labs(title = "Liczba oferowanych win w zależności od koloru",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "Liczba oferowanych win", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+
+```
+
+# kolor vs smak
+
+```{r}
+lista_win %>% 
+   filter(!is.na(smak)) %>% 
+   count(kolor, smak) %>% 
+   ungroup() %>%
+   mutate(p = 100*n/sum(n)) %>%
+   ggplot() + 
+   geom_tile(aes(kolor, smak, fill = n), color = "gray50") +
+   geom_text(aes(kolor, smak, label = sprintf("%d\n(%.1f%%)", n, p))) +
+   scale_fill_distiller(palette = "YlOrBr") +
+   theme(legend.position = "bottom") +
+   labs(title = "Liczba oferowanych win w zależności od koloru i smaku",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "", color = "", fill = "Liczba oferowanych win",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+```
+
+# smak vs kraj
+
+```{r}
+lista_win %>% 
+   filter(!is.na(smak)) %>% 
+   count(kraj, smak) %>%
+   ungroup() %>%
+   group_by(smak) %>%
+   mutate(p = 100*n/sum(n)) %>%
+   ungroup() %>%
+   ggplot() + 
+   geom_tile(aes(smak, kraj, fill = p), color = "gray50") +
+   geom_text(aes(smak, kraj, label = sprintf("%.1f%%", p))) +
+   scale_fill_distiller(palette = "YlOrBr") +
+   theme(legend.position = "bottom") +
+   labs(title = "Liczba oferowanych win w zależności\nod smaku i kraju pochodzenia",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "", color = "", fill = "Procent oferowanych win danego smaku",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+```
+
+# region vs smak dla poszczególnych krajów
+
+```{r, fig.height=18, fig.width=12}
+lista_win %>%
+   filter(!is.na(region), !is.na(smak)) %>%
+   count(kraj, region, smak) %>%
+   ungroup() %>%
+   group_by(kraj, region) %>%
+   mutate(p = sum(n)) %>%
+   ungroup() %>%
+   arrange(p) %>%
+   mutate(region = factor(region, levels = unique(region))) %>%
+   mutate(smak = factor(smak, levels = c("Słodkie", "Półsłodkie", "Półwytrawne", "Wytrawne"))) %>%
+   ggplot() +
+   geom_col(aes(region, n, fill = smak), color = "gray50") +
+   coord_flip() +
+   scale_fill_manual(values = c("Półsłodkie" = "#fdae61", "Słodkie" = "#d7191c",
+                                "Półwytrawne" = "#a6d96a", "Wytrawne" = "#1a9641")) +
+   facet_wrap(~kraj, scales = "free", ncol=3) +
+   theme(legend.position = "bottom") +
+   labs(title = "Gdzie powstają wina wytrawne, a gdzie słodkie?",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+```
+
+
+
+# ceny wg krajów
+
+```{r}
+lista_win %>%
+   group_by(kraj) %>%
+   mutate(m_cena = median(cena, na.rm = TRUE)) %>%
+   ungroup() %>%
+   arrange(m_cena) %>%
+   mutate(kraj = factor(kraj, levels = unique(kraj))) %>%
+   ggplot() +
+   geom_boxplot(aes(kraj, cena), fill = "#fdae61") +
+   coord_flip() +
+   labs(title = "Średnia ceny wina w zależności od kraju pochodzenia",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "Cena za butelkę [zł]", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+
+```
+
+# ceny wg smaku
+
+```{r, fig.height=5}
+lista_win %>%
+   filter(!is.na(smak)) %>%
+   group_by(smak) %>%
+   mutate(m_cena = median(cena, na.rm = TRUE)) %>%
+   ungroup() %>%
+   arrange(m_cena) %>%
+   mutate(smak = factor(smak, levels = unique(smak))) %>%
+   ggplot() +
+   geom_boxplot(aes(smak, cena), fill = "#fdae61") +
+   coord_flip() +
+   labs(title = "Średnia ceny wina w zależności od smaku",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "Cena za butelkę [zł]", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+
+```
+
+
+# czy ocena ekspertów ma sens (tj. czy przedziały są poprawie podzielone)
+
+```{r, fig.height=4}
+lista_win %>%
+   filter(!is.na(expert_rating_ocena)) %>%
+   ggplot() +
+   geom_boxplot(aes(expert_rating_ocena, expert_rating), fill = "#fdae61") +
+   labs(title = "",
+        x = "Ocena ekspertów", y = "Ocena ekspertów w punktach", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+```
+
+
+```{r}
+lista_win %>%
+   filter(!is.na(expert_rating), !is.na(smak)) %>%
+   ggplot() +
+   geom_smooth(aes(expert_rating, cena, color = smak), show.legend = FALSE) +
+   facet_wrap(~smak, ncol = 2) +
+   labs(title = "Cena wina a ocena ekspertów - czy lepsze wina są droższe?",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "Ocena ekspertów w punktach", y = "Cena za butelkę [zł]", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+
+```
+
+**Do wyboru wina dobrego i taniego (oraz taniego i dobrego) jeszcze wrócimy.**
+
+
+# rating ekspertów wg smaku
+
+```{r, fig.height=4}
+lista_win %>%
+   filter(!is.na(smak)) %>%
+   ggplot() +
+   geom_boxplot(aes(smak, expert_rating), fill = "#fdae61") +
+   coord_flip() +
+   labs(title = "Ocena ekspertów a smak wina",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "Ocena ekspertów w punktach", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+
+```
+
+# popularność wg smaku
+
+```{r, fig.height=4}
+lista_win %>%
+   filter(!is.na(smak)) %>%
+   mutate(popularnosc = as.numeric(popularnosc)) %>%
+   ggplot() + 
+   geom_boxplot(aes(smak, popularnosc), fill = "#fdae61") +
+   coord_flip() + 
+   scale_y_log10() +
+   labs(title = "Które smaki są najpopularniejsze? Pijemy słodkie czy wytrawne?",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "Popularność (liczba sprzedanych butelek)", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+
+```
+
+# co pijemy? popularność
+
+```{r}
+lista_win %>%
+   filter(!is.na(smak), !is.na(kolor)) %>%
+   group_by(smak, kolor) %>%
+   summarise(n = mean(popularnosc, na.rm = T)) %>%
+   ungroup() %>%
+   mutate(p = 100*n/sum(n)) %>%
+   ggplot() + 
+   geom_tile(aes(kolor, smak, fill = n), color = "gray80") +
+   geom_text(aes(kolor, smak, label = sprintf("%.1f%%", p))) +
+   scale_fill_distiller(palette = "YlOrBr") +
+   theme(legend.position = "bottom") +
+   labs(title = "Pijemy słodkie czy wytrawne? Białe czy czerwone?",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "", color = "", fill = "Popularność (liczba sprzedanych butelek)",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+```
+
+# oceny ekspertów wg kraju
+
+```{r}
+lista_win %>%
+   filter(!is.na(smak), !is.na(expert_rating)) %>%
+   group_by(kraj, smak) %>%
+   summarise(n = mean(expert_rating, na.rm = TRUE)) %>%
+   ungroup() %>% 
+   group_by(smak) %>%
+   mutate(max_n = max(n)) %>%
+   ungroup() %>%
+   ggplot() + 
+   geom_col(aes(kraj, n, fill = n == max_n), color = "gray50", show.legend = FALSE) + 
+   scale_fill_manual(values = c("TRUE" = "#d7191c", "FALSE" = "#a6d96a")) +
+   coord_flip() + 
+   facet_wrap(~smak, scales = "free") +
+   labs(title = "Skąd pochodzą najlepsze wina poszczególnych smaków?",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "Ocena ekspertów w punktach", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+```
+
+
+```{r}
+lista_win %>%
+   filter(!is.na(smak), !is.na(expert_rating)) %>%
+   group_by(kraj, smak) %>%
+   summarise(n = mean(expert_rating, na.rm = TRUE)) %>%
+   ungroup() %>% 
+   group_by(smak) %>% 
+   top_n(3, n) %>% 
+   ungroup() %>%
+   arrange(smak, desc(n)) %>% 
+   select(smak, kraj, n) %>%
+   mutate(n = round(n, 1))
+```
+
+
+# ta Słowacja wygląda interesująco
+
+```{r}
+lista_win %>%
+   filter(kraj == "Słowacja", smak == "Półwytrawne") %>%
+   filter(expert_rating == max(expert_rating, na.rm = TRUE)) %>%
+   select(nazwa, kolor, rocznik, producent, cena, expert_rating)
+```
+
+
+# oceny cząstkowe w zależności od koloru i smaku
+
+```{r}
+lista_win %>%
+   select(c(2, 3, 25:28)) %>%
+   filter(!is.na(smak)) %>%
+   gather(key, val, -kolor, -smak) %>%
+   group_by(kolor, smak, key) %>%
+   summarise(n = mean(val)) %>%
+   mutate(key = gsub("ocena_", "", key)) %>%
+   ggplot() +
+   geom_point(aes(n, key), size = 3, color = "#d7191c") + 
+   scale_x_continuous(limits = c(0, 5)) +
+   facet_grid(kolor~smak) +
+   labs(title = "Ocena wina według smaku i koloru",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "Średnia ocena cechy", y = "", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+```
+
+
+# najlepsze w danej kategorii oceny
+
+```{r}
+lista_win %>%
+   select(c(2, 3, 25:28)) %>%
+   filter(!is.na(smak)) %>%
+   gather(key, val, -kolor, -smak) %>%
+   group_by(kolor, smak, key) %>%
+   summarise(n = mean(val)) %>%
+   mutate(key = gsub("ocena_", "", key)) %>%
+   group_by(key) %>%
+   filter(n == max(n)) %>%
+   mutate(n = round(n, 1)) %>%
+   ungroup() %>%
+   select(key, kolor, smak, n)
+```
+
+
+# oceny cząstkowe w zależności od kraju i smaku
+
+```{r, fig.height=10}
+lista_win %>%
+   select(c(3, 6, 25:28)) %>%
+   filter(!is.na(smak)) %>%
+   gather(key, val, -smak, -kraj) %>%
+   filter(val != 0) %>%
+   group_by(smak, kraj, key) %>%
+   summarise(n = mean(val)) %>%
+   ungroup() %>%
+   group_by(key) %>%
+   mutate(n_max = max(n)) %>%
+   ungroup() %>%
+   mutate(key = gsub("ocena_", "", key)) %>%
+   ggplot() +
+   geom_tile(aes(smak, kraj, fill = n), color = "gray80") +
+   geom_text(aes(smak, kraj, label = round(n, 1), color = (n == n_max)), size = 2.9, show.legend = FALSE) +
+   scale_fill_distiller(palette = "PuBu") +
+   scale_color_manual(values = c("TRUE" = "red", "FALSE" = "black")) +
+   facet_wrap(~key) +
+   theme(legend.position = "bottom") +
+   labs(title = "Gdzie powstaje najbardziej aromatyczne wino?\nA gdzie najsmaczniejsze?",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "", color = "", fill = "Średnia ocena",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+```
+
+
+# najlepsze kraje wg smaku i składowej oceny
+
+```{r, fig.height=5}
+lista_win %>%
+   select(c(3, 6, 25:28)) %>%
+   filter(!is.na(smak)) %>%
+   gather(key, val, -smak, -kraj) %>%
+   filter(val != 0) %>%
+   group_by(smak, kraj, key) %>%
+   summarise(n = mean(val)) %>%
+   ungroup() %>%
+   mutate(key = gsub("ocena_", "", key)) %>%
+   group_by(smak, key) %>%
+   top_n(1, n) %>%
+   ggplot() +
+   geom_jitter(aes(key, smak, color = kraj),
+               width = 0.15, height = 0.15,
+               size = 5) +
+   labs(title = "Kraje, w krórych powstają najlepsze wina",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+```
+
+
+# w jakiej temperaturze podawać wina?
+
+```{r}
+lista_win %>%
+   filter(!is.na(smak)) %>%
+   count(smak, kolor, temp_podawania) %>%
+   ungroup() %>%
+   group_by(smak, kolor) %>%
+   arrange(desc(n)) %>%
+   mutate(rown = row_number()) %>%
+   top_n(-1, rown) %>%
+   ungroup() %>%
+   select(kolor, smak, temp_podawania) %>%
+   spread(kolor, temp_podawania, fill = " ")
+```
+
+
+# od kiedy wina są dostępne w sklepie
+
+```{r, fig.height=4}
+lista_win %>%
+   filter(!is.na(dostpene_od)) %>%
+   ggplot() +
+   geom_density(aes(dostpene_od), color = "gray50", fill = "#a6d96a") +
+   labs(title = "Dostępność roczników w sklepie",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+```
+
+
+# czy wina długo dostępne są bardziej popularne?
+
+```{r, fig.height=4}
+lista_win %>%
+   mutate(popularnosc = as.numeric(popularnosc)) %>%
+   filter(!is.na(dostpene_od), !is.na(popularnosc)) %>%
+   ggplot() +
+   geom_smooth(aes(dostpene_od, popularnosc), color = "#a6d96a") +
+   labs(title = "Popularność wina, a jego rocznik",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "Popularność (liczba sprzedanych butelek)", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+```
+
+
+# popularność vs cena
+
+```{r, fig.height=4}
+lista_win %>%
+   mutate(popularnosc = as.numeric(popularnosc)) %>%
+   ggplot() +
+   geom_smooth(aes(cena, popularnosc), color = "#a6d96a") +
+   scale_x_log10() +
+   labs(title = "Popularność wina, a jego cena",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "Cena za butelkę [zł]", y = "Populatność (liczba sprzedanych butelek)", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+
+```
+
+
+```{r}
+lista_win %>%
+   filter(cena <= 200) %>%
+   mutate(popularnosc = as.numeric(popularnosc)) %>%
+   mutate(cena = cut(cena, breaks = seq(0, 200, 10))) %>%
+   mutate(cena = fct_rev(cena)) %>%
+   ggplot() +
+   geom_col(aes(cena, popularnosc), fill = "#a6d96a") +
+   coord_flip() +
+   labs(title = "Popularność wina, a jego cena\n(dla win w cenie poniżej 200 zł za butelkę)",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "Przedział cenowy [zł]", y = "Popularność (liczba sprzedanych butelek)", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+
+```
+
+# w jakim kraju jaki szczep?
+
+```{r, fig.height=8}
+lista_win %>%
+   select(kraj, szczep) %>%
+   separate(szczep, paste0("Szczep", 1:8), sep = ",") %>%
+   gather(dummy, Szczep, -kraj) %>%
+   filter(!is.na(Szczep)) %>%
+   select(-dummy) %>%
+   rowwise() %>%
+   mutate(Szczep = str_trim(str_replace(Szczep,"\\(.*\\)", ""))) %>%
+   ungroup() %>%
+   count(kraj, Szczep, sort = T) %>%
+   top_n(3, n) %>%
+   ungroup() %>%
+   ggplot() +
+   geom_col(aes(Szczep, n), color = "gray50", fill = "#a6d96a") +
+   coord_flip() + 
+   facet_wrap(~kraj, scales="free", ncol = 3) +
+   labs(title = "Najpopularniejsze szczepy według kraju pochodzenia wina",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "Liczba dostępnych win", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+```
+
+
+# średnia ocena szczepów
+
+```{r, fig.height=4}
+lista_win %>%
+   select(expert_rating, szczep) %>%
+   separate(szczep, paste0("Szczep", 1:8), sep = ",") %>%
+   gather(dummy, Szczep, -expert_rating) %>%
+   filter(!is.na(Szczep)) %>%
+   select(-dummy) %>%
+   rowwise() %>%
+   mutate(Szczep = str_trim(str_replace(Szczep,"\\(.*\\)", ""))) %>%
+   ungroup() %>%
+   group_by(Szczep) %>%
+   summarise(ocena = mean(expert_rating, na.rm = T)) %>%
+   ungroup() %>%
+   arrange(ocena) %>%
+   top_n(10, ocena) %>%
+   mutate(Szczep = factor(Szczep, level=Szczep)) %>%
+   ggplot() +
+   geom_point(aes(Szczep, ocena), color = "#d7191c", size = 4) +
+   geom_text(aes(Szczep, ocena, label = round(ocena, 1)), color = "gray50", vjust=-1.1) +
+   scale_y_continuous(limits = c(90, 100)) +
+   labs(title = "Najlepiej oceniane szczepy",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "Średnia ocena ekspetrów dla szczepu", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+
+```
+
+# średnia cena szczepów
+
+```{r}
+lista_win %>%
+   filter(!is.na(cena), !is.na(szczep)) %>%
+   select(cena, szczep) %>%
+   separate(szczep, paste0("Szczep", 1:8), sep = ",") %>%
+   gather(dummy, Szczep, -cena) %>%
+   filter(!is.na(Szczep)) %>%
+   select(-dummy) %>%
+   rowwise() %>%
+   mutate(Szczep = str_trim(str_replace(Szczep,"\\(.*\\)", ""))) %>%
+   ungroup() %>%
+   group_by(Szczep) %>%
+   summarise(m_cena = mean(cena)) %>%
+   ungroup() %>%
+   top_n(25, m_cena) %>%
+   arrange(m_cena) %>%
+   mutate(Szczep = factor(Szczep, levels = Szczep)) %>%
+   ggplot() +
+   geom_col(aes(Szczep, m_cena), color = "gray50", fill = "#a6d96a") +
+   coord_flip() +
+   labs(title = "Najdroższe szczepy",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "", y = "Średnia cena win danego szczepu [zł]", color = "", fill = "",
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+```
+
+
+
+
+# grafy
+
+```{r}
+library(igraph)
+
+graf_df <- lista_win %>%
+   select(kraj, szczep) %>%
+   separate(szczep, paste0("Szczep", 1:8), sep = ",") %>%
+   gather(dummy, Szczep, -kraj) %>%
+   filter(!is.na(Szczep)) %>%
+   select(-dummy) %>%
+   rowwise() %>%
+   mutate(Szczep = str_trim(str_replace(Szczep,"\\(.*\\)", ""))) %>%
+   ungroup() %>%
+   count(kraj, Szczep) %>%
+   ungroup() %>%
+   filter(n >= quantile(n, 0.75))
+
+graf <- graph_from_data_frame(graf_df)
+E(graf)$width <- graf_df$n
+
+com <- cluster_walktrap(graf, weights = E(graf)$width)
+V(graf)$color <- com$membership+1
+
+graf_lay <- layout_with_fr(graf, weights = E(graf)$width)
+
+plot(graf,
+     vertex.label = V(graf)$name,
+     vertex.label.color = "black",
+     vertex.label.cex = 0.8,
+     vertex.label.dist = 0.2,
+     vertex.size = 3,
+     edge.arrow.size = 1,
+     edge.arrow.width = NA,
+     edge.width = 8*E(graf)$width/max(E(graf)$width),
+     edge.curved = TRUE,
+     layout = graf_lay,
+     mark.groups = com)
+```
+
+
+# wino tanie i dobre
+
+```{r}
+tanie_dobre <- lista_win %>%
+   filter(!is.na(expert_rating), !is.na(smak), !is.na(cena), pojemnosc == 0.75) %>%
+   group_by(smak, kolor) %>%
+   top_n(-25, cena) %>% # 25 najtańszych
+   top_n(5, expert_rating) %>% # 5 najlepszych
+   ungroup() %>%
+   select(smak, kolor, nazwa, kraj, cena, expert_rating) %>%
+   arrange(smak, kolor, desc(cena), expert_rating)
+
+# najpopularniejsze wina
+tanie_dobre %>%
+   filter(smak == "Półwytrawne", kolor == "Czerwone") %>%
+   arrange(cena, desc(expert_rating)) %>%
+   select(nazwa, kraj, cena, expert_rating)
+```
+
+
+# wino dobre i tanie
+
+```{r}
+dobre_tanie <- lista_win %>%
+   filter(!is.na(expert_rating), !is.na(smak), !is.na(cena), pojemnosc == 0.75) %>%
+   group_by(smak, kolor) %>%
+   top_n(25, expert_rating) %>% # 25 najlepszych
+   top_n(-5, cena) %>% # 5 najtańszych
+   ungroup() %>%
+   select(smak, kolor, nazwa, kraj, cena, expert_rating) %>%
+   arrange(smak, kolor, expert_rating, desc(cena))
+
+
+# drugie w kolejności popularności
+dobre_tanie %>%
+   filter(smak == "Półsłodkie", kolor == "Białe") %>%
+   arrange(desc(expert_rating), cena) %>%
+   select(nazwa, kraj, cena, expert_rating)
+```
+
+# część wspólna z najniższą ceną
+```{r}
+intersect(tanie_dobre, dobre_tanie) %>%
+   group_by(smak, kolor) %>%
+   filter(cena == min(cena)) %>%
+   ungroup()
+```
+
+# a moze po prostu jakość/cena? z tych lepszych połówek ceny i jakości
+
+```{r}
+lista_win %>%
+   filter(!is.na(smak), pojemnosc == 0.75) %>%
+   group_by(smak, kolor) %>%
+   # chcemy te z górnej połowy jakości i dolnej połowy ceny
+   filter(expert_rating >= median(expert_rating, na.rm = TRUE),
+          cena <= median(cena, na.rm = TRUE)) %>%
+   mutate(jakosc_cena = expert_rating / cena) %>%
+   top_n(1, jakosc_cena) %>%
+   ungroup() %>%
+   select(smak, kolor, nazwa, kraj, cena, expert_rating, jakosc_cena, popularnosc) %>%
+   arrange(smak, kolor, desc(jakosc_cena)) %>%
+   mutate(jakosc_cena = round(jakosc_cena, 2))
+```
+
+# rozkład jakości do ceny
+
+```{r}
+lista_win %>%
+   filter(!is.na(smak), pojemnosc == 0.75, kolor != "Inne", !is.na(expert_rating), !is.na(cena)) %>%
+   group_by(smak, kolor) %>%
+   mutate(jakosc_cena = expert_rating / cena) %>%
+   mutate(median_jakosc_cena = median(jakosc_cena, na.rm = TRUE)) %>%
+   ungroup() %>%
+   ggplot() +
+   geom_density(aes(jakosc_cena), color = "gray50", fill = "#a6d96a") +
+   geom_vline(aes(xintercept = median_jakosc_cena), color = "red") +
+   facet_grid(smak~kolor, scales = "free") +
+   labs(title = "Rozkład jakości do ceny dla różnych gatunków wina",
+        subtitle = "Na podstawie danych pozyskanych ze sklepu Winezja.pl",
+        x = "Stosunek jakości do ceny", y = "", 
+        caption = "(c) Łukasz Prokulski, fb.com/DaneAnalizy")
+```
